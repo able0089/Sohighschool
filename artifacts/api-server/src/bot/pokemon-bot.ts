@@ -12,6 +12,7 @@ import { computeDHash, hammingDistance } from "../lib/dhash";
 import { logger } from "../lib/logger";
 
 const POKETWO_BOT_ID = "716390085896962058";
+const OWNER_ID = "1396815034247806999";
 const HAMMING_THRESHOLD = 10;
 
 type PendingEntry = {
@@ -63,10 +64,56 @@ async function handleMessage(message: Message): Promise<void> {
   const channelId = message.channelId;
   const key = makeKey(guildId, channelId);
 
-  if (message.author.id === POKETWO_BOT_ID) {
+  if (message.author.bot && message.author.id === POKETWO_BOT_ID) {
     await handlePoketwoMessage(message, key, guildId, channelId);
     return;
   }
+
+  if (!message.author.bot && message.author.id === OWNER_ID) {
+    const content = message.content.trim();
+    if (content === "!pokedex") {
+      await handlePokedex(message);
+      return;
+    }
+  }
+}
+
+async function handlePokedex(message: Message): Promise<void> {
+  const entries = await db
+    .select({ name: pokemonHashesTable.name, learnedAt: pokemonHashesTable.learnedAt })
+    .from(pokemonHashesTable)
+    .orderBy(pokemonHashesTable.name);
+
+  const total = entries.length;
+
+  if (total === 0) {
+    await message.reply("📖 Pokédex is empty — no Pokémon learned yet. Let some spawn and get caught!");
+    return;
+  }
+
+  const names = entries.map((e) => e.name);
+
+  const chunks: string[] = [];
+  let current = "";
+  for (const name of names) {
+    const line = `• ${name}\n`;
+    if ((current + line).length > 1800) {
+      chunks.push(current);
+      current = line;
+    } else {
+      current += line;
+    }
+  }
+  if (current) chunks.push(current);
+
+  const header = `📖 **Pokédex — ${total} Pokémon learned**\n\n`;
+
+  for (let i = 0; i < chunks.length; i++) {
+    const prefix = i === 0 ? header : "";
+    await message.reply(`${prefix}${chunks[i]}`);
+  }
+
+  logger.info({ total, requestedBy: message.author.id }, "Pokedex command used");
 }
 
 async function handlePoketwoMessage(
