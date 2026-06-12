@@ -1,0 +1,33 @@
+Railway deployment failed — Build Error
+
+Regenerate the pnpm lockfile by running `pnpm install` at the repo root and committing the updated `pnpm-lock.yaml`. The build fails because the `overrides` field in `pnpm-workspace.yaml` does not match what is recorded in `pnpm-lock.yaml`, causing `pnpm install --frozen-lockfile` to reject the installation. This mismatch has persisted across multiple deployments and predates the current commit.
+
+Repository: https://github.com/able0089/Sohighschool
+Branch: main · Commit: 157ceb4 — Update bot to use new prefix and add owner commands
+
+Refactors bot logic to support a new prefix (pk! or bot mention) and introduces several owner-specific commands for bot management and testing.
+
+Replit-Commit-Author: Agent
+Replit-Commit-Session-Id: 63a22044-8ca3-4a5c-b58c-093af412289f
+Replit-Commit-Checkpoint-Type: full_checkpoint
+Replit-Commit-Event-Id: ff9ce29f-6271-4830-a0f6-1d294461a59f
+Replit-Helium-Checkpoint-Created: true
+Deployment ID: c8f776a5-5da7-419f-b14b-981114a65bb6
+Service ID: 3ba28ba8-06b5-4c2e-8fc1-1433f9f51d05
+Environment ID: aefc9bb1-9d5b-4d2d-96ee-491fb7de548c
+
+---
+
+## Problem
+The Railpack build fails during `pnpm install --frozen-lockfile` with error `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`: "Cannot proceed with the frozen installation. The current 'overrides' configuration doesn't match the value found in the lockfile." The SNAPSHOT_CODE stage completed successfully, but BUILD_IMAGE fails immediately when pnpm attempts to install dependencies. The `overrides` field in `pnpm-workspace.yaml` contains extensive platform-specific package exclusions and an esbuild version pin that are not reflected in the current `pnpm-lock.yaml`. The `--frozen-lockfile` flag used by Railpack prevents pnpm from updating the lockfile during CI builds, so the mismatch causes an immediate failure.
+
+## Diagnosis
+The `pnpm-workspace.yaml` has an `overrides` section that excludes non-linux-x64 platform binaries for esbuild, lightningcss, @tailwindcss/oxide, rollup, and @expo/ngrok-bin, plus pins esbuild to version 0.27.3 and replaces @esbuild-kit/esm-loader with tsx. These overrides were added or modified without regenerating the lockfile afterward. When Railpack runs `pnpm install --frozen-lockfile`, pnpm detects that the overrides in the workspace config don't match the overrides hash stored in the lockfile and refuses to proceed. The triggering commit only changed `artifacts/api-server/src/bot/pokemon-bot.ts` — no dependency or workspace config files were touched — confirming the mismatch predates this commit and has caused at least four consecutive deployment failures.
+
+## Fix
+This fix requires running a command locally and cannot be implemented via file edits alone:
+
+1. Clone the repository and checkout the `main` branch.
+2. Run `pnpm install` at the repo root (no flags) — this will regenerate `pnpm-lock.yaml` to match the current `overrides` in `pnpm-workspace.yaml`.
+3. Commit the updated `pnpm-lock.yaml` and push to `main`.
+4. Railway will automatically trigger a new deployment because `/pnpm-lock.yaml` is now included in the service's watch patterns.
