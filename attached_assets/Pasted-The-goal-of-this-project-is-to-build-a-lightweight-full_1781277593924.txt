@@ -1,0 +1,16 @@
+The goal of this project is to build a lightweight, fully automated helper bot for Pokétwo that achieves absolute naming accuracy without requiring manual training commands or external, heavy AI models.
+​Instead of guessing what a Pokémon looks like, the bot relies on a computer vision fingerprinting technique combined with algorithmic chat-interception to learn every single Pokémon completely hands-free as people play the game.
+​🔬 The Core Mechanics
+​1. Structural Fingerprinting (Image Hashing)
+​Every time Pokétwo spawns a Pokémon, it uses an identical, standardized official artwork asset file. Because the visual structure of these images never changes, we can convert the image into a unique text string using a Difference Hash (dHash) algorithm.
+​Unlike standard cryptographic hashes (like MD5) which break if a tiny piece of data changes, a perceptual dHash analyzes the gradient structure of the image.
+​A specific image (e.g., standard Bulbasaur) will generate the exact same structural hash string every single time it appears on Discord.
+​2. The Hands-Free Self-Learning Loop
+​The bot operates on an automated observation loop that turns every game event—whether a success or a loss—into a training moment for its local database:
+​The Interception: When a new spawn occurs, the bot grabs the image, calculates its unique hash, and checks its database. If it recognizes the hash, it drops the name instantly. If it doesn't recognize it, the bot stores the raw hash in a temporary "holding memory" and goes completely silent.
+​The Catch Learning: If a player successfully catches the Pokémon, the bot reads Pokétwo's congratulatory text pattern and uses Regular Expressions (Regex) to extract the official name, permanently mapping it to the held hash.
+​The Flee Learning: If no one catches the Pokémon and it times out, Pokétwo outputs a message stating "Wild [Name] fled.". The bot intercepts this text, strips out the name, and pairs it to the held hash anyway.
+​3. Smart Memory Management
+​To keep the database perfectly clean and accurate, the bot includes built-in state overrides:
+​Overwrite Protection: If an unknown Pokémon spawns but flees without a text announcement, and a new spawn occurs, the bot automatically clears out the older unmapped hash and replaces it with the new one. This ensures that a new catch is never mistakenly paired with an old, missed image asset.
+​By combining deterministic image hashing with clever text-parsing triggers, the bot builds a flawless, permanent dictionary of the game's assets completely behind the scenes.
