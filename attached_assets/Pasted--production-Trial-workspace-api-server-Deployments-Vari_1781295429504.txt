@@ -1,0 +1,116 @@
+
+
+production
+
+
+Trial
+
+
+
+@workspace/api-server
+Deployments
+Variables
+Metrics
+Console
+Settings
+Unexposed service
+US West
+1 Replica
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+History
+
+Hide Skipped
+
+
+
+
+
+@workspace/api-server
+
+Failed
+Jun 13, 2026, 1:41 AM
+Get Help
+DetailsBuildDeployNetwork Flow
+Diagnosis › Try running a diagnosis to understand why this deployment failed.
+
+Diagnose
+You reached the start of the range
+Jun 13, 2026, 1:36 AM
+unpacking archive
+790 KB
+7ms
+using build driver nixpacks-v1.41.0
+uploading snapshot
+297.4 KB
+18ms
+ 
+╔══════════════════════════════ Nixpacks v1.41.0 ══════════════════════════════╗
+║ setup      │ nodejs_24, pnpm                                                 ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ install    │ pnpm install --frozen-lockfile                                  ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ build      │ pnpm install && pnpm --filter @workspace/api-server run build   ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ start      │ node --enable-source-maps ./artifacts/api-server/dist/index.mjs ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+ 
+ 
+Saved output to:
+  snapshot-target-unpack
+
+internal
+load build definition from Dockerfile
+0ms
+
+internal
+load metadata for ghcr.io/railwayapp/nixpacks:ubuntu-1745885067
+341ms
+
+internal
+load .dockerignore
+0ms
+SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ARG "DISCORD_BOT_TOKEN") (line 11)(https://docs.docker.com/go/dockerfile/rule/secrets-used-in-arg-or-env/)
+ details: Sensitive data should not be used in the ARG or ENV commands
+SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ENV "DISCORD_BOT_TOKEN") (line 12)(https://docs.docker.com/go/dockerfile/rule/secrets-used-in-arg-or-env/)
+ details: Sensitive data should not be used in the ARG or ENV commands
+UndefinedVar: Usage of undefined variable '$NIXPACKS_PATH' (line 18)(https://docs.docker.com/go/dockerfile/rule/undefined-var/)
+ details: Variables should be defined before their use
+
+internal
+load build context
+0ms
+
+stage-0
+FROM ghcr.io/railwayapp/nixpacks:ubuntu-1745885067@sha256:d45c89d80e13d7ad0fd555b5130f22a866d9dd10e861f589932303ef2314c7de
+53ms
+
+stage-0
+WORKDIR /app/ cached
+0ms
+
+stage-0
+COPY .nixpacks/nixpkgs-ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.nix .nixpacks/nixpkgs-ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.nix
+173ms
+
+stage-0
+RUN nix-env -if .nixpacks/nixpkgs-ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.nix && nix-collect-garbage -d
+27s
+20| ];
+scheduling build on Metal builder "builder-srqewa"
+Build Failed: build daemon returned an error < failed to solve: process "/bin/bash -ol pipefail -c nix-env -if .nixpacks/nixpkgs-ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.nix && nix-collect-garbage -d" did not complete successfully: exit code: 1 >
+You reached the end of the range
+Jun 13, 2026, 1:47 AM
