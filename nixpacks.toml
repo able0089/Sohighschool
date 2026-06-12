@@ -1,5 +1,5 @@
 [phases.install]
-cmds = ["pnpm install --frozen-lockfile"]
+cmds = ["pnpm install --no-frozen-lockfile"]
 
 [phases.build]
 cmds = ["pnpm --filter @workspace/api-server run build"]
