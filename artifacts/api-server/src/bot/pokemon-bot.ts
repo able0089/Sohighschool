@@ -6,7 +6,6 @@ import {
   Attachment,
 } from "discord.js";
 import axios from "axios";
-import { eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { pokemonHashesTable } from "@workspace/db";
 import { computeDHash, hammingDistance } from "../lib/dhash";
@@ -102,8 +101,9 @@ async function handlePoketwoMessage(
 
     const existing = await lookupHash(hash);
     if (existing) {
-      logger.info({ name: existing.name }, "Recognized Pokémon — replying");
-      await message.reply(`It's **${existing.name}**!`);
+      const confidence = (((64 - existing.distance) / 64) * 100).toFixed(1);
+      logger.info({ name: existing.name, confidence }, "Recognized Pokémon — replying");
+      await message.reply(`**${existing.name}** (${confidence}%)`);
     } else {
       if (pendingHashes.has(key)) {
         logger.info({ key }, "New spawn replaced old pending hash");
@@ -174,23 +174,23 @@ async function learnFromText(
   logger.info({ hash: pending.hash, name, source }, "Learned new Pokémon mapping");
 }
 
-async function lookupHash(hash: string): Promise<{ name: string } | null> {
+async function lookupHash(hash: string): Promise<{ name: string; distance: number } | null> {
   const allEntries = await db
     .select({ hash: pokemonHashesTable.hash, name: pokemonHashesTable.name })
     .from(pokemonHashesTable);
 
-  let bestMatch: { name: string } | null = null;
+  let bestMatch: { name: string; distance: number } | null = null;
   let bestDistance = Infinity;
 
   for (const entry of allEntries) {
     const dist = hammingDistance(hash, entry.hash);
     if (dist < bestDistance) {
       bestDistance = dist;
-      bestMatch = { name: entry.name };
+      bestMatch = { name: entry.name, distance: dist };
     }
   }
 
-  if (bestDistance <= HAMMING_THRESHOLD) {
+  if (bestDistance <= HAMMING_THRESHOLD && bestMatch) {
     return bestMatch;
   }
 
