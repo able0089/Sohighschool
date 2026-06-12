@@ -1,0 +1,41 @@
+Railway deployment failed — Build Error
+
+Regenerate the pnpm lockfile by running `pnpm install` locally and committing the updated `pnpm-lock.yaml`. The build failed because the `overrides` field in `pnpm-workspace.yaml` does not match what is recorded in `pnpm-lock.yaml`, causing `pnpm install --frozen-lockfile` to reject the installation. This mismatch predates the triggering commit and has caused every deployment of this service to fail.
+
+Repository: https://github.com/able0089/Sohighschool
+Branch: main · Commit: 980c9d6 — Add owner-only command to view learned Pokémon
+
+Add a new !pokedex command that can only be used by the owner to view a list of all learned Pokémon, along with their total count.
+
+Replit-Commit-Author: Agent
+Replit-Commit-Session-Id: 63a22044-8ca3-4a5c-b58c-093af412289f
+Replit-Commit-Checkpoint-Type: full_checkpoint
+Replit-Commit-Event-Id: 63eca0a7-7bbe-4aab-a97d-34403ea633b1
+Replit-Helium-Checkpoint-Created: true
+Deployment ID: 7814c237-a013-4bab-84b4-108049aa3952
+Service ID: 3ba28ba8-06b5-4c2e-8fc1-1433f9f51d05
+Environment ID: aefc9bb1-9d5b-4d2d-96ee-491fb7de548c
+
+---
+
+## Problem
+The Railpack build fails at the `pnpm install --frozen-lockfile --prefer-offline` step with `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`. The error states: "The current 'overrides' configuration doesn't match the value found in the lockfile."
+
+Build log error:
+```
+ERR_PNPM_LOCKFILE_CONFIG_MISMATCH  Cannot proceed with the frozen installation. The current "overrides" configuration doesn't match the value found in the lockfile
+Update your lockfile using "pnpm install --no-frozen-lockfile"
+```
+
+The service uses the Railpack builder with no rootDirectory set. The install step uses `pnpm install --frozen-lockfile --prefer-offline` (Railpack default for pnpm workspaces). This is a pnpm workspace with 8 projects.
+
+## Diagnosis
+The `pnpm-workspace.yaml` file at the repo root contains an extensive `overrides` section that excludes platform-specific binaries for esbuild, lightningcss, @tailwindcss/oxide, rollup, and @expo/ngrok-bin, targeting Replit's linux-x64 environment. The `pnpm-lock.yaml` was not regenerated after these overrides were added or modified, causing a mismatch that `--frozen-lockfile` correctly rejects. This mismatch predates the triggering commit (which only modified `artifacts/api-server/src/bot/pokemon-bot.ts`) and has caused every deployment of this service to fail.
+
+## Fix
+1. In the repo root, run: `pnpm install`
+   - This regenerates `pnpm-lock.yaml` to incorporate the current `overrides` from `pnpm-workspace.yaml`.
+2. Commit the updated `pnpm-lock.yaml` file and push to the `main` branch.
+3. Railway will automatically redeploy with the corrected lockfile.
+
+Note: The overrides in `pnpm-workspace.yaml` exclude all non-linux-x64 platform binaries. Railway builds on linux-x64, so these overrides are compatible with the build environment. If developing on macOS or Windows locally, you may need to temporarily adjust the overrides to include your local platform before running `pnpm install`, then restore them before committing.
