@@ -2,7 +2,7 @@ FROM node:22-slim
 
 WORKDIR /app
 
-RUN npm install -g pnpm
+RUN npm install -g pnpm@9
 
 COPY package.json pnpm-workspace.yaml ./
 COPY pnpm-lock.yaml ./
