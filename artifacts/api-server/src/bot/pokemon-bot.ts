@@ -100,10 +100,16 @@ function extractFleeName(content: string, embeds: readonly { title?: string | nu
       }
     }
     // Pokétwo sometimes sends embed whose title IS the Pokémon name
-    // and description says "fled" / "ran away" etc.
-    if (embed.title && /fled|ran away|got away/i.test(combined)) {
+    // and description / footer says "fled" / "ran away" etc.
+    // Guard: title must not itself contain flee/non-name words.
+    if (embed.title && /fled|ran away|got away|escaped/i.test(combined)) {
       const name = cleanPokemonName(embed.title);
-      if (/^[A-Za-z]/.test(name) && name.length > 1) {
+      const titleIsName =
+        /^[A-Za-z]/.test(name) &&
+        name.length > 1 &&
+        name.length < 35 &&
+        !/fled|ran|away|escaped|wild|pokémon|pokemon|battle|the\s/i.test(name);
+      if (titleIsName) {
         return toTitleCase(name);
       }
     }
@@ -198,7 +204,7 @@ async function handleOwnerCommand(
       await handleStats(message);
       break;
     case "pokedex":
-      await handlePokedex(message);
+      await handlePokedex(message, args);
       break;
     case "lookup":
       await handleLookup(message, args);
@@ -223,6 +229,9 @@ async function handleOwnerCommand(
       break;
     case "cleandb":
       await handleCleanDb(message);
+      break;
+    case "learned":
+      await handleLearned(message);
       break;
     case "help":
       await handleHelp(message);
@@ -253,34 +262,41 @@ async function handleStats(message: Message): Promise<void> {
   );
 }
 
-async function handlePokedex(message: Message): Promise<void> {
-  const entries = await db
+async function handlePokedex(message: Message, args: string[]): Promise<void> {
+  const page = Math.max(1, parseInt(args[0] ?? "1", 10) || 1);
+  const PAGE_SIZE = 20;
+
+  const allEntries = await db
     .select({ name: pokemonHashesTable.name })
     .from(pokemonHashesTable)
     .orderBy(pokemonHashesTable.name);
 
-  if (entries.length === 0) {
+  // Deduplicate by name (case-insensitive)
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const e of allEntries) {
+    const key = e.name.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(e.name);
+    }
+  }
+
+  if (unique.length === 0) {
     await message.reply("📖 Pokédex is empty — no Pokémon learned yet!");
     return;
   }
 
-  const chunks: string[] = [];
-  let current = "";
-  for (const entry of entries) {
-    const line = `• ${entry.name}\n`;
-    if ((current + line).length > 1800) {
-      chunks.push(current);
-      current = line;
-    } else {
-      current += line;
-    }
-  }
-  if (current) chunks.push(current);
+  const totalPages = Math.ceil(unique.length / PAGE_SIZE);
+  const clampedPage = Math.min(page, totalPages);
+  const slice = unique.slice((clampedPage - 1) * PAGE_SIZE, clampedPage * PAGE_SIZE);
 
-  for (let i = 0; i < chunks.length; i++) {
-    const header = i === 0 ? `📖 **Pokédex — ${entries.length} learned**\n\n` : "";
-    await message.reply(`${header}${chunks[i]}`);
-  }
+  const list = slice.map((name, i) => `\`${(clampedPage - 1) * PAGE_SIZE + i + 1}.\` ${name}`).join("\n");
+  await message.reply(
+    `📖 **Pokédex — ${unique.length} unique Pokémon** | Page ${clampedPage}/${totalPages}\n\n` +
+    `${list}\n\n` +
+    (totalPages > 1 ? `_Use \`pk!pokedex ${clampedPage + 1}\` for next page_` : "")
+  );
 }
 
 async function handleLookup(message: Message, args: string[]): Promise<void> {
@@ -463,6 +479,30 @@ async function handleClearPending(message: Message): Promise<void> {
   await message.reply(`🧹 Cleared **${count}** pending spawn(s) from memory.`);
 }
 
+async function handleLearned(message: Message): Promise<void> {
+  const entries = await db
+    .select({
+      name: pokemonHashesTable.name,
+      hash: pokemonHashesTable.hash,
+      learnedAt: pokemonHashesTable.learnedAt,
+    })
+    .from(pokemonHashesTable)
+    .orderBy(sql`learned_at DESC`)
+    .limit(15);
+
+  if (entries.length === 0) {
+    await message.reply("📚 Nothing learned yet!");
+    return;
+  }
+
+  const lines = entries.map((e, i) => {
+    const date = e.learnedAt.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    return `\`${i + 1}.\` **${e.name}** · \`${e.hash}\` · ${date}`;
+  }).join("\n");
+
+  await message.reply(`📚 **Last ${entries.length} learned:**\n\n${lines}`);
+}
+
 async function handleCleanDb(message: Message): Promise<void> {
   // Remove entries where name contains digits, parentheses, or is suspiciously long
   const deleted = await db
@@ -495,6 +535,7 @@ async function handleHelp(message: Message): Promise<void> {
     `\`pk!pending\` — show unresolved spawns in memory\n` +
     `\`pk!clearpending\` — wipe all pending spawns\n` +
     `\`pk!cleandb\` — remove invalid entries (level/gender/IV garbage)\n` +
+    `\`pk!learned\` — show last 15 learned Pokémon with hash\n` +
     `\`pk!help\` — show this list`
   );
 }
@@ -509,6 +550,20 @@ async function handlePoketwoMessage(
 ): Promise<void> {
   const content = message.content ?? "";
   const embeds = message.embeds ?? [];
+
+  // Log every non-trivial Pokétwo message for diagnostics
+  const embedSummary = embeds.map((e) => ({
+    title: e.title,
+    desc: (e.description ?? "").slice(0, 80),
+    footer: e.footer?.text,
+    hasImage: !!(e.image?.url || e.thumbnail?.url),
+  }));
+  if (content || embeds.length > 0) {
+    logger.info(
+      { content: content.slice(0, 120), embeds: embedSummary, key },
+      "Pokétwo message received"
+    );
+  }
 
   // ── Spawn detection ──
   const isSpawn =
@@ -546,24 +601,30 @@ async function handlePoketwoMessage(
     return;
   }
 
-  // ── Catch detection ──
-  if (content.toLowerCase().includes("congratulations") && content.toLowerCase().includes("caught")) {
+  // ── Catch detection (plain text) ──
+  if (
+    content.toLowerCase().includes("congratulations") &&
+    content.toLowerCase().includes("caught")
+  ) {
     const name = extractCatchName(content);
+    logger.info({ name, content: content.slice(0, 120) }, "Catch text detected");
     if (name) {
       await learnFromText(key, name, "catch");
       return;
     }
   }
 
-  // Embed-based catch (some servers use embed confirmations)
+  // ── Catch detection (embed) ──
   const isCatchEmbed = embeds.some(
     (e) =>
       (e.title ?? "").toLowerCase().includes("caught") ||
-      (e.description ?? "").toLowerCase().includes("congratulations")
+      (e.description ?? "").toLowerCase().includes("congratulations") ||
+      (e.description ?? "").toLowerCase().includes("you caught")
   );
   if (isCatchEmbed) {
     const embedText = embeds.map((e) => `${e.title ?? ""} ${e.description ?? ""}`).join(" ");
     const name = extractCatchName(embedText);
+    logger.info({ name, embedText: embedText.slice(0, 120) }, "Catch embed detected");
     if (name) {
       await learnFromText(key, name, "catch");
       return;
@@ -571,24 +632,28 @@ async function handlePoketwoMessage(
   }
 
   // ── Flee detection ──
-  const isFleeText =
-    content.toLowerCase().includes("fled") ||
-    content.toLowerCase().includes("ran away") ||
-    content.toLowerCase().includes("got away");
-  const isFleeEmbed = embeds.some(
-    (e) =>
-      (e.title ?? "").toLowerCase().includes("fled") ||
-      (e.title ?? "").toLowerCase().includes("ran away") ||
-      (e.description ?? "").toLowerCase().includes("fled") ||
-      (e.description ?? "").toLowerCase().includes("ran away")
-  );
+  const fleeKeywords = ["fled", "ran away", "got away", "escaped"];
+  const contentLower = content.toLowerCase();
+  const isFleeText = fleeKeywords.some((k) => contentLower.includes(k));
+  const isFleeEmbed = embeds.some((e) => {
+    const combined = `${e.title ?? ""} ${e.description ?? ""} ${e.footer?.text ?? ""}`.toLowerCase();
+    return fleeKeywords.some((k) => combined.includes(k));
+  });
 
   if (isFleeText || isFleeEmbed) {
+    logger.info(
+      { content: content.slice(0, 120), embedSummary, key },
+      "Flee message detected — attempting name extraction"
+    );
     const name = extractFleeName(content, embeds);
     if (name) {
+      logger.info({ name, key }, "Flee name extracted — learning");
       await learnFromText(key, name, "flee");
     } else {
-      logger.debug({ content: content.slice(0, 100) }, "Flee detected but couldn't extract name");
+      logger.warn(
+        { content: content.slice(0, 120), embedTitles: embeds.map((e) => e.title) },
+        "Flee detected but could not extract name — use pk!teach to fix manually"
+      );
     }
     return;
   }
